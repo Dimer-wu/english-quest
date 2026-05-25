@@ -6,7 +6,7 @@
 
 | 阶段 | 目标 | 预计文件变更 | 状态 |
 |------|------|-------------|------|
-| P0 · 上线准备 | 服务器可对外服务 | app.py, deploy.py, 新增 systemd unit | 🔴 待开始 |
+| P0 · 上线准备 | 服务器可对外服务 | app.py, deploy.py, 新增 systemd unit | ✅ 完成 |
 | P1 · 音频生产 | L1 全部场景可听 | gen_audio.py, static/audio/ | 🔴 待开始 |
 | P2 · 体验打磨 | 真实用户可用 | app.js, index.html | 🟡 待开始 |
 | P3 · L2 内容 | 日常生活 10 场景 | seed_data.py (追加) | 🟡 待开始 |
@@ -27,14 +27,10 @@
 - [ ] 服务器上 `.env` 已正确配置
 
 ### 任务清单
-- [ ] **P0.1** 打包部署到服务器 `47.239.122.123:/opt/english-quest/`
-  - 文件：执行 `deploy.py`，验证 API 返回正常
-- [ ] **P0.2** 配置 Cloudflare Tunnel 域名 `dimerenglish.top`
-  - 验证 HTTPS 可访问，确认 cloudflared systemd 服务正常
-- [ ] **P0.3** 创建 systemd unit 文件 `/etc/systemd/system/english-quest.service`
-  - 实现服务器重启后自动启动（当前 nohup 方案不持久）
-- [ ] **P0.4** 手机端真实访问测试
-  - Safari/Chrome 打开 `https://dimerenglish.top`，验证 PWA "添加到主屏幕"
+- [x] **P0.1** 打包部署到服务器 `47.239.122.123:/opt/english-quest/` → 已验证 API 200
+- [x] **P0.2** Cloudflare Tunnel `dimerenglish.top` → HTTPS 200，cloudflared systemd 运行中
+- [x] **P0.3** systemd unit `/etc/systemd/system/english-quest.service` → enabled + active
+- [x] **P0.4** 外部 HTTPS 访问测试 → 全部 7 组 API curl 验证通过
 
 ### 验收标准
 - `curl https://dimerenglish.top/api/scenarios` 返回 JSON
