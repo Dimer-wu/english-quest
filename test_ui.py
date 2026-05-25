@@ -42,16 +42,45 @@ def main():
         auth_title = page.locator("#authTitle").text_content()
         print(f"  [OK] Switched to register mode: {auth_title}")
 
-        # Register new user
+        # Register new user (pending approval)
         page.locator("#loginUser").fill(TEST_USER)
         page.locator("#loginPass").fill(TEST_PASS)
         page.locator("#authBtn").click()
-        page.wait_for_timeout(1000)
+        page.wait_for_timeout(800)
         shot(page, "02-after-register.png")
 
-        tab_bar = page.locator("#tabBar")
-        assert tab_bar.is_visible(), "Tab bar should be visible after register!"
-        print("  [OK] Register successful, entered home page")
+        # Check pending message
+        auth_msg = page.locator("#authMsg").text_content()
+        print(f"  [OK] Register: {auth_msg}")
+        assert "审核" in auth_msg or "pending" in auth_msg.lower(), f"Expected pending message, got: {auth_msg}"
+
+        # Switch to login and login as admin
+        page.locator("#toggleAuth").click()
+        page.wait_for_timeout(200)
+        page.locator("#loginUser").fill("Dimer")
+        page.locator("#loginPass").fill("2011KUNlong")
+        page.locator("#authBtn").click()
+        page.wait_for_selector("#tabBar", state="visible", timeout=5000)
+        print("  [OK] Admin login successful")
+
+        # Navigate to profile to approve the new user
+        page.locator(".tab-item[data-page='profilePage']").click()
+        page.wait_for_timeout(800)
+        # Click approve button for the pending user
+        approve_btn = page.locator(".admin-approve").first
+        if approve_btn.is_visible():
+            approve_btn.click()
+            page.wait_for_timeout(300)
+            print("  [OK] Approved new user")
+
+        # Logout and login as the approved user
+        page.locator(".page.active button:has-text('退出登录')").click()
+        page.wait_for_timeout(500)
+        page.locator("#loginUser").fill(TEST_USER)
+        page.locator("#loginPass").fill(TEST_PASS)
+        page.locator("#authBtn").click()
+        page.wait_for_selector("#tabBar", state="visible", timeout=5000)
+        print("  [OK] New user login successful")
 
         # Step 2: Home page
         print("\n=== 2. Home Page ===")

@@ -186,6 +186,16 @@ function renderLogin() {
         try {
             const url = (mode === "login") ? "/api/login" : "/api/register";
             const r = await API.post(url, { username: u, password: p });
+
+            if (r.pending) {
+                // 注册成功，等待审核
+                document.getElementById("authMsg").style.color = "#00a000";
+                document.getElementById("authMsg").textContent = r.message;
+                document.getElementById("loginUser").value = "";
+                document.getElementById("loginPass").value = "";
+                return;
+            }
+
             S.user = r.user;
             const me = await API.get("/api/me");
             S.stats = me.stats;
@@ -290,7 +300,6 @@ async function openScenario(scenarioId) {
         S.currentStep = 0;
         S.studyChunks = [];
         S.aiMessages = [];
-        _chatInitialized = false;
         showPage("studyPage", true);
     } catch (e) {
         alert("加载场景失败: " + e.message);
@@ -496,8 +505,6 @@ function renderStep2(el, sc) {
 }
 
 // ── 步骤 3：AI 角色扮演 ────────────────────────────────
-let _chatInitialized = false;
-
 function messageHtml(m) {
     const isUser = m.role === "user";
     return `
@@ -518,79 +525,90 @@ function appendChatMessages() {
 }
 
 function renderStep3(el, sc) {
-    if (!_chatInitialized) {
-        // 首次渲染：建立完整 UI 结构
-        el.innerHTML = `
-            <h3 style="font-size:18px;margin-bottom:8px">AI 角色扮演</h3>
-            <p style="font-size:12px;color:#666;margin-bottom:16px">在「${sc.title_cn}」场景中和 AI 完成英文对话</p>
-            <div id="chatMessages" style="min-height:250px;max-height:400px;overflow-y:auto;margin-bottom:16px"></div>
-            <div style="display:flex;gap:8px">
-                <input id="chatInput" class="input-field" placeholder="输入英文回复..." style="flex:1">
-                <button id="chatBtn" class="btn-primary" style="flex-shrink:0">发送</button>
-            </div>
-            <button id="voiceBtn" style="width:100%;margin-top:8px;background:#000;color:#FFFDF0;border:3px solid #000;padding:10px;cursor:pointer;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px">🎤 语音输入</button>
-            <p id="chatStatus" style="font-size:11px;color:#666;margin-top:8px;text-align:center"></p>`;
+    // 始终重建 UI 结构（确保步骤切换后事件绑定不丢失）
+    el.innerHTML = `
+        <h3 style="font-size:18px;margin-bottom:8px">AI 角色扮演</h3>
+        <p style="font-size:12px;color:#666;margin-bottom:16px">在「${sc.title_cn}」场景中和 AI 完成英文对话</p>
+        <div id="chatMessages" style="min-height:250px;max-height:400px;overflow-y:auto;margin-bottom:16px"></div>
+        <div style="display:flex;gap:8px">
+            <input id="chatInput" class="input-field" placeholder="输入英文回复..." style="flex:1">
+            <button id="chatBtn" class="btn-primary" style="flex-shrink:0">发送</button>
+        </div>
+        <button id="voiceBtn" style="width:100%;margin-top:8px;background:#000;color:#FFFDF0;border:3px solid #000;padding:10px;cursor:pointer;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px">🎤 语音输入</button>
+        <p id="chatStatus" style="font-size:11px;color:#666;margin-top:8px;text-align:center"></p>`;
 
-        // 语音支持检测
-        const hasSpeech = "webkitSpeechRecognition" in window || "SpeechRecognition" in window;
-        if (!hasSpeech) {
-            document.getElementById("voiceBtn").style.display = "none";
-        }
-
-        const sendMsg = async () => {
-            const input = document.getElementById("chatInput");
-            const msg = input.value.trim();
-            if (!msg) return;
-            input.value = "";
-            input.disabled = true;
-            document.getElementById("chatBtn").disabled = true;
-            document.getElementById("chatStatus").textContent = "AI 正在回复...";
-
-            S.aiMessages.push({ role: "user", content: msg });
-            appendChatMessages();
-
-            try {
-                const r = await API.post("/api/chat", { message: msg, scenario_id: sc.id });
-                S.aiMessages.push({ role: "assistant", content: r.reply, tip: r.tip });
-                appendChatMessages();
-                document.getElementById("chatStatus").textContent = "";
-            } catch (e) {
-                document.getElementById("chatStatus").textContent = "发送失败: " + e.message;
-            }
-            input.disabled = false;
-            document.getElementById("chatBtn").disabled = false;
-            input.focus();
-        };
-
-        document.getElementById("chatBtn").onclick = sendMsg;
-        document.getElementById("chatInput").onkeydown = (e) => { if (e.key === "Enter") sendMsg(); };
-        document.getElementById("chatInput").onfocus = () => {
-            // 移动端键盘弹出时滚动输入框到可见区域
-            setTimeout(() => {
-                document.getElementById("chatInput").scrollIntoView({ behavior: "smooth", block: "center" });
-            }, 300);
-        };
-
-        document.getElementById("voiceBtn").onclick = () => {
-            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-            const rec = new SR();
-            rec.lang = "en-US";
-            rec.interimResults = false;
-            document.getElementById("chatStatus").textContent = "正在聆听...";
-            rec.start();
-            rec.onresult = (e) => {
-                document.getElementById("chatInput").value = e.results[0][0].transcript;
-                document.getElementById("chatStatus").textContent = "识别完成，点击发送 →";
-            };
-            rec.onerror = (e) => {
-                document.getElementById("chatStatus").textContent = "语音识别失败: " + e.error;
-            };
-        };
-
-        _chatInitialized = true;
+    // 语音支持检测
+    const hasSpeech = "webkitSpeechRecognition" in window || "SpeechRecognition" in window;
+    const voiceBtn = document.getElementById("voiceBtn");
+    if (!hasSpeech) {
+        voiceBtn.style.display = "none";
+    } else {
+        voiceBtn.style.display = "";
     }
 
-    // 初始化或更新后都刷新消息列表
+    const sendMsg = async () => {
+        const input = document.getElementById("chatInput");
+        const msg = input.value.trim();
+        if (!msg) return;
+        input.value = "";
+        input.disabled = true;
+        document.getElementById("chatBtn").disabled = true;
+        document.getElementById("chatStatus").textContent = "AI 正在回复...";
+
+        S.aiMessages.push({ role: "user", content: msg });
+        appendChatMessages();
+
+        try {
+            const r = await API.post("/api/chat", { message: msg, scenario_id: sc.id });
+            S.aiMessages.push({ role: "assistant", content: r.reply, tip: r.tip });
+            appendChatMessages();
+            document.getElementById("chatStatus").textContent = "";
+        } catch (e) {
+            document.getElementById("chatStatus").textContent = "发送失败: " + e.message;
+        }
+        input.disabled = false;
+        document.getElementById("chatBtn").disabled = false;
+        input.focus();
+    };
+
+    document.getElementById("chatBtn").onclick = sendMsg;
+    document.getElementById("chatInput").onkeydown = (e) => { if (e.key === "Enter") sendMsg(); };
+    document.getElementById("chatInput").onfocus = () => {
+        setTimeout(() => {
+            document.getElementById("chatInput").scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 300);
+    };
+
+    // 语音输入 — 带友好的错误提示
+    voiceBtn.onclick = () => {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const rec = new SR();
+        rec.lang = "en-US";
+        rec.interimResults = false;
+        document.getElementById("chatStatus").textContent = "正在聆听...";
+        try {
+            rec.start();
+        } catch (err) {
+            document.getElementById("chatStatus").textContent = "请先允许浏览器使用麦克风权限";
+            return;
+        }
+        rec.onresult = (e) => {
+            document.getElementById("chatInput").value = e.results[0][0].transcript;
+            document.getElementById("chatStatus").textContent = "识别完成，点击发送 →";
+        };
+        rec.onerror = (e) => {
+            const errors = {
+                "not-allowed": "请允许麦克风权限后重试",
+                "no-speech": "未检测到语音，请再试一次",
+                "audio-capture": "未找到麦克风设备",
+                "network": "网络连接失败，请检查网络",
+                "aborted": "识别已取消",
+            };
+            const msg = errors[e.error] || ("语音识别失败: " + e.error);
+            document.getElementById("chatStatus").textContent = msg;
+        };
+    };
+
     appendChatMessages();
 }
 
@@ -938,8 +956,68 @@ function renderProfile() {
             ${statCard(streakDays, "连续天数")}
         </div>
 
+        ${S.user?.is_admin ? `
+        <div class="card" style="padding:20px;margin-bottom:16px">
+            <h3 style="font-size:18px;margin-bottom:12px">🔧 用户管理（管理员）</h3>
+            <div id="adminUserList" style="font-size:13px">
+                <p style="color:#999;text-align:center">加载中...</p>
+            </div>
+        </div>` : ""}
         <button class="btn-primary" style="width:100%" onclick="logout()">退出登录</button>
     `;
+
+    // 异步加载管理员面板
+    if (S.user?.is_admin) {
+        loadAdminUsers();
+    }
+}
+
+// ════════════════════════════════════════════════════════
+//  管理员
+// ════════════════════════════════════════════════════════
+async function loadAdminUsers() {
+    try {
+        const data = await API.get("/api/admin/users");
+        const users = data.users;
+        let html = "";
+        for (const u of users) {
+            const statusColors = { active: "#00a000", pending: "#FF6B00", disabled: "#d00" };
+            const statusLabels = { active: "已激活", pending: "待审核", disabled: "已禁用" };
+            const color = statusColors[u.status] || "#000";
+            const label = statusLabels[u.status] || u.status;
+            html += `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:2px solid #000">
+                    <div>
+                        <span style="font-weight:700">${escHtml(u.username)}</span>
+                        <span style="font-size:11px;color:${color};margin-left:8px">${label}</span>
+                        ${u.is_admin ? '<span style="font-size:10px;background:#000;color:#FFFDF0;padding:2px 6px;margin-left:4px">管理员</span>' : ""}
+                        <span style="font-size:10px;color:#999;margin-left:4px">L${u.level} · ${u.streak_days}天</span>
+                    </div>
+                    <div style="display:flex;gap:4px">
+                        ${u.status === "pending" ? `<button class="admin-approve" data-id="${u.id}" style="background:#00a000;color:#fff;border:2px solid #000;padding:4px 8px;cursor:pointer;font-size:11px;font-weight:700">通过</button>` : ""}
+                        ${u.status !== "disabled" && !u.is_admin ? `<button class="admin-disable" data-id="${u.id}" style="background:#fff;border:2px solid #d00;color:#d00;padding:4px 8px;cursor:pointer;font-size:11px;font-weight:700">禁用</button>` : ""}
+                    </div>
+                </div>`;
+        }
+        document.getElementById("adminUserList").innerHTML = html || '<p style="color:#999;text-align:center">暂无用户</p>';
+
+        // 绑定按钮
+        document.querySelectorAll(".admin-approve").forEach(btn => {
+            btn.onclick = async () => {
+                await API.post(`/api/admin/users/${btn.dataset.id}/approve`);
+                loadAdminUsers();
+            };
+        });
+        document.querySelectorAll(".admin-disable").forEach(btn => {
+            btn.onclick = async () => {
+                if (!confirm("确定要禁用此用户吗？")) return;
+                await API.post(`/api/admin/users/${btn.dataset.id}/disable`);
+                loadAdminUsers();
+            };
+        });
+    } catch (e) {
+        document.getElementById("adminUserList").innerHTML = '<p style="color:#d00">加载失败: ' + e.message + '</p>';
+    }
 }
 
 // ════════════════════════════════════════════════════════

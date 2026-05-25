@@ -16,7 +16,7 @@ from config import (
     SRS_INTERVALS,
 )
 from models import init_db, SessionLocal, get_db, User, Scenario, UserProgress, UserChunk, ChatLog
-from deps import get_current_user, require_user
+from deps import get_current_user, require_user, require_admin
 from tts import get_audio
 
 logging.basicConfig(
@@ -51,6 +51,8 @@ def startup():
             db.add(User(
                 username=ADMIN_USERNAME,
                 password_hash=generate_password_hash(ADMIN_PASSWORD),
+                status="active",
+                is_admin=1,
             ))
             db.commit()
             logger.info("已创建管理员: %s", ADMIN_USERNAME)
@@ -84,22 +86,26 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
     user = db.query(User).filter_by(username=username).first()
     if not user or not check_password_hash(user.password_hash, password):
         raise HTTPException(401, "用户名或密码错误")
+    if user.status == "pending":
+        raise HTTPException(403, "账号等待管理员审核中，请稍后再试")
+    if user.status == "disabled":
+        raise HTTPException(403, "账号已被禁用，请联系管理员")
     request.session["user_id"] = user.id
     return {"ok": True, "user": {"id": user.id, "username": user.username, "level": user.level}}
 
 
 @app.post("/api/register")
-def api_register(request: Request, username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+def api_register(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     if db.query(User).filter_by(username=username).first():
         raise HTTPException(400, "用户名已存在")
     user = User(
         username=username,
         password_hash=generate_password_hash(password),
+        status="pending",
     )
     db.add(user)
     db.commit()
-    request.session["user_id"] = user.id
-    return {"ok": True, "user": {"id": user.id, "username": user.username, "level": 1}}
+    return {"ok": True, "pending": True, "message": "注册成功！请等待管理员审核后即可登录使用。"}
 
 
 @app.get("/api/me")
@@ -115,6 +121,7 @@ def api_me(user: User = Depends(get_current_user), db: Session = Depends(get_db)
             "username": user.username,
             "level": user.level,
             "streak_days": user.streak_days,
+            "is_admin": bool(user.is_admin),
         },
         "stats": {
             "completed_scenarios": completed,
@@ -398,6 +405,51 @@ def api_tts(text: str, voice: str = "en_female_dacey_uranus_bigtts"):
     if path is None:
         raise HTTPException(500, "TTS synthesis failed")
     return FileResponse(path, media_type="audio/mpeg")
+
+
+# ── 管理员 API ────────────────────────────────────────
+
+@app.get("/api/admin/users")
+def api_admin_users(user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    users = db.query(User).order_by(User.created_at.desc()).all()
+    return {
+        "users": [
+            {
+                "id": u.id,
+                "username": u.username,
+                "status": u.status,
+                "is_admin": bool(u.is_admin),
+                "level": u.level,
+                "streak_days": u.streak_days,
+                "created_at": u.created_at.strftime("%Y-%m-%d %H:%M") if u.created_at else "",
+            }
+            for u in users
+        ]
+    }
+
+
+@app.post("/api/admin/users/{user_id}/approve")
+def api_admin_approve(user_id: int, user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    target = db.query(User).filter_by(id=user_id).first()
+    if not target:
+        raise HTTPException(404, "用户不存在")
+    if target.is_admin:
+        raise HTTPException(400, "不能操作管理员账号")
+    target.status = "active"
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/api/admin/users/{user_id}/disable")
+def api_admin_disable(user_id: int, user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    target = db.query(User).filter_by(id=user_id).first()
+    if not target:
+        raise HTTPException(404, "用户不存在")
+    if target.is_admin:
+        raise HTTPException(400, "不能操作管理员账号")
+    target.status = "disabled"
+    db.commit()
+    return {"ok": True}
 
 
 # ── 启动入口 ──────────────────────────────────────────

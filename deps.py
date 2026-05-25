@@ -17,3 +17,11 @@ def require_user(request: Request, db: Session = Depends(get_db)):
     if not user_id:
         raise HTTPException(401, "请先登录")
     return db.query(User).filter_by(id=user_id).first()
+
+
+def require_admin(request: Request, db: Session = Depends(get_db)):
+    """强制管理员认证"""
+    user = require_user(request, db)
+    if not user.is_admin:
+        raise HTTPException(403, "需要管理员权限")
+    return user

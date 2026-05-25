@@ -15,6 +15,8 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(50), unique=True, nullable=False)
     password_hash = Column(String(200), nullable=False)
+    status = Column(String(20), default="pending")  # pending / active / disabled
+    is_admin = Column(Integer, default=0)
     level = Column(Integer, default=1)
     streak_days = Column(Integer, default=0)
     last_study_date = Column(Date)
