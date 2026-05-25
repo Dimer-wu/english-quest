@@ -40,6 +40,11 @@ setTimeout(initVoices, 500);
 
 function speak(text, rate = 0.85) {
     if (!("speechSynthesis" in window)) return;
+    // 停掉任何正在播放的 HTML5 audio
+    if (_currentAudio) {
+        _currentAudio.pause();
+        _currentAudio = null;
+    }
     window.speechSynthesis.cancel();
 
     if (!_voicesLoaded) initVoices();
@@ -980,15 +985,16 @@ function bindAudioButtons(el) {
         btn.onclick = (e) => {
             e.stopPropagation();
             const text = btn.dataset.text;
+            const staticAudio = btn.dataset.audio; // 预生成 MP3 路径
             const rate = parseFloat(btn.dataset.rate || "0.85");
-            if (!text) return;
+            if (!text && !staticAudio) return;
 
             stopAudio();
             btn.textContent = "⏳";
 
-            // 优先使用豆包 TTS API（服务器缓存，首次慢后续秒出）
-            const ttsUrl = `/api/tts?text=${encodeURIComponent(text)}`;
-            const audio = new Audio(ttsUrl);
+            // 优先使用预生成 MP3（零延迟），无 MP3 时调 TTS API
+            const audioUrl = staticAudio || `/api/tts?text=${encodeURIComponent(text)}`;
+            const audio = new Audio(audioUrl);
             audio.playbackRate = rate;
             _currentAudio = audio;
 
@@ -1004,14 +1010,34 @@ function bindAudioButtons(el) {
                 if (resolved) return;
                 resolved = true;
                 if (_currentAudio === audio) _currentAudio = null;
-                btn.textContent = "⏸";
-                playTTS(btn, text, rate);
+                // 回退链：MP3 失败 → TTS API → 浏览器语音
+                if (staticAudio) {
+                    // 预生成 MP3 404，尝试 TTS API
+                    const apiUrl = `/api/tts?text=${encodeURIComponent(text)}`;
+                    const apiAudio = new Audio(apiUrl);
+                    apiAudio.playbackRate = rate;
+                    _currentAudio = apiAudio;
+                    apiAudio.onended = () => { btn.textContent = "▶"; _currentAudio = null; };
+                    apiAudio.onerror = () => {
+                        _currentAudio = null;
+                        if (text) { btn.textContent = "⏸"; playTTS(btn, text, rate); }
+                        else { btn.textContent = "▶"; }
+                    };
+                    apiAudio.load();
+                    apiAudio.play().then(() => { btn.textContent = "⏸"; }).catch(() => { btn.textContent = "▶"; });
+                } else if (text) {
+                    btn.textContent = "⏸";
+                    playTTS(btn, text, rate);
+                } else {
+                    btn.textContent = "▶";
+                }
             };
 
             audio.onended = () => finish();
             audio.onerror = fallback;
             audio.load();
             audio.play().then(() => {
+                resolved = true; // 防止 onerror 误触发回退
                 btn.textContent = "⏸";
             }).catch(fallback);
         };
