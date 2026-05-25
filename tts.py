@@ -8,7 +8,7 @@ from config import VOLC_APP_ID, VOLC_ACCESS_TOKEN
 
 logger = logging.getLogger("tts")
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "audio", "tts_cache")
-VOICE_EN = "en_female_dacey_uranus_bigtts"  # 美式英语女声 Dacey（大模型高质量）
+VOICE_EN = "BV002_streaming"  # 美式英语女声（流式合成，速度快）
 
 os.makedirs(CACHE_DIR, exist_ok=True)
 

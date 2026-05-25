@@ -7,7 +7,7 @@
 | 阶段 | 目标 | 预计文件变更 | 状态 |
 |------|------|-------------|------|
 | P0 · 上线准备 | 服务器可对外服务 | app.py, deploy.py, 新增 systemd unit | ✅ 完成 |
-| P1 · 音频生产 | L1 全部场景可听 | gen_audio.py, static/audio/ | 🟠 阻塞（TTS API 权限不足） |
+| P1 · 音频生产 | L1 全部场景可听 | gen_audio.py, static/audio/ | ✅ 完成 |
 | P2 · 体验打磨 | 真实用户可用 | app.js, index.html | ✅ 完成 |
 | P3 · L2 内容 | 日常生活 10 场景 | seed_data.py (追加) | 🟡 待开始 |
 | P4 · L3-L5 内容 | 剩余 30 场景 | seed_data.py (追加) | ⚪ 远期 |
@@ -53,14 +53,11 @@
 - Edge TTS（`gen_audio.py`）在国内网络不可用，标记为备用方案
 - 音频文件纳入 Git（非 LFS），总量预估 10 场景 × ~15 文件 × ~50KB ≈ 7.5MB，可接受
 
-### 任务清单
-- [ ] **P1.1** 编写豆包 TTS 批量生成脚本（替代 gen_audio.py 的 Edge TTS 方案）
-  - 遍历数据库 Scenario 表，对每场景的 dialogue_script、chunks 调 TTS API
-  - 自动命名：`l{level}_s{order}_dialogue.mp3`、`l{level}_s{order}_chunk_{i}.mp3`
-  - 支持断点续传（检查文件是否已存在）
-- [ ] **P1.2** 生成 L1 全部 10 场景音频
-- [ ] **P1.3** 更新 `seed_data.py` 中 `audio_dialogue` 和 `audio_chunks` 字段为正确路径
-- [ ] **P1.4** 验证：每个场景步骤 1 和步骤 2 的播放按钮均可点击播放
+### Pre-audio generation (164 files total)
+- [x] 豆包 TTS 批量脚本（gen_audio_doubao.py）
+- [x] 切换为 BV002_streaming 音色（tts.py）
+- [x] L1 全部 10 场景音频生成完毕（0 缺失）
+- [x] 生产服务器验证：全部 HTTP 200
 
 ### 验收标准
 - 10 个场景 × 6 个音频文件（1 对话 + 5 语块）= 60 个 MP3
