@@ -98,6 +98,9 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
 def api_register(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     if db.query(User).filter_by(username=username).first():
         raise HTTPException(400, "用户名已存在")
+    user_count = db.query(User).count()
+    if user_count >= 10:
+        raise HTTPException(403, "注册名额已满（上限 10 人），请联系管理员")
     user = User(
         username=username,
         password_hash=generate_password_hash(password),
