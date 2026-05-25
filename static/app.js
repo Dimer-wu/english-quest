@@ -216,23 +216,38 @@ function renderHome() {
     const level = S.user?.level || 1;
     const completed = S.stats?.completed_scenarios || 0;
     const total = S.stats?.total_scenarios || 50;
+    const loading = S.scenarios.length === 0;
 
     let scenarioCards = "";
-    const levelScenarios = S.scenarios.filter(s => s.level === level);
-    for (const s of levelScenarios) {
-        const doneStyle = completed >= s.order ? "border-color:#00a000;background:#f0fff0" : "";
-        const check = completed >= s.order ? '<span style="color:#00a000;font-size:20px">✓</span>' : "";
-        scenarioCards += `
-            <div class="card scenario-card" data-id="${s.id}" style="padding:16px;margin-bottom:12px;cursor:pointer;transition:transform 0.15s;${doneStyle}">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start">
-                    <div>
-                        <span style="font-family:'Space Grotesk',sans-serif;font-weight:900;font-size:20px;color:#ccc;margin-right:8px">${String(s.order).padStart(2,"0")}</span>
-                        <span style="font-weight:700">${s.title_cn}</span>
+    if (loading) {
+        // 骨架屏 — 加载中显示占位卡片
+        for (let i = 0; i < 10; i++) {
+            scenarioCards += `
+                <div class="card" style="padding:16px;margin-bottom:12px;opacity:0.5">
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <div style="width:24px;height:24px;background:#eee;border:2px solid #ccc"></div>
+                        <div style="flex:1;height:20px;background:#eee;border:2px solid #ccc"></div>
                     </div>
-                    ${check}
-                </div>
-                <p style="font-size:12px;color:#666;margin-top:4px">${s.title}</p>
-            </div>`;
+                    <div style="height:14px;background:#eee;border:2px solid #ccc;margin-top:8px;width:60%"></div>
+                </div>`;
+        }
+    } else {
+        const levelScenarios = S.scenarios.filter(s => s.level === level);
+        for (const s of levelScenarios) {
+            const doneStyle = completed >= s.order ? "border-color:#00a000;background:#f0fff0" : "";
+            const check = completed >= s.order ? '<span style="color:#00a000;font-size:20px">✓</span>' : "";
+            scenarioCards += `
+                <div class="card scenario-card" data-id="${s.id}" style="padding:16px;margin-bottom:12px;cursor:pointer;transition:transform 0.15s;${doneStyle}">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                        <div>
+                            <span style="font-family:'Space Grotesk',sans-serif;font-weight:900;font-size:20px;color:#ccc;margin-right:8px">${String(s.order).padStart(2,"0")}</span>
+                            <span style="font-weight:700">${s.title_cn}</span>
+                        </div>
+                        ${check}
+                    </div>
+                    <p style="font-size:12px;color:#666;margin-top:4px">${s.title}</p>
+                </div>`;
+        }
     }
 
     const lv = LEVELS[level] || { name: "L"+level, cefr: "A1" };
@@ -250,7 +265,12 @@ function renderHome() {
             <button class="btn-primary" onclick="logout()">退出登录</button>
         </p>`;
 
-    // 场景卡片点击 → 进入学习页
+    if (!loading) bindScenarioCards();
+
+    // bindScenarioCards called within renderHome when not loading
+}
+
+function bindScenarioCards() {
     document.querySelectorAll(".scenario-card").forEach(card => {
         card.onclick = () => openScenario(parseInt(card.dataset.id));
         card.onmouseenter = () => card.style.transform = "translateY(-2px)";
@@ -265,6 +285,7 @@ async function openScenario(scenarioId) {
         S.currentStep = 0;
         S.studyChunks = [];
         S.aiMessages = [];
+        _chatInitialized = false;
         showPage("studyPage", true);
     } catch (e) {
         alert("加载场景失败: " + e.message);
@@ -470,80 +491,102 @@ function renderStep2(el, sc) {
 }
 
 // ── 步骤 3：AI 角色扮演 ────────────────────────────────
+let _chatInitialized = false;
+
+function messageHtml(m) {
+    const isUser = m.role === "user";
+    return `
+        <div style="display:flex;justify-content:${isUser?'flex-end':'flex-start'};margin-bottom:12px">
+            <div style="max-width:80%;padding:12px 16px;border:3px solid #000;background:${isUser?'#FFFDF0':'#fff'};box-shadow:4px 4px 0px ${isUser?'#FF6B00':'#000'}">
+                <p style="font-size:14px">${escHtml(m.content)}</p>
+                ${m.tip ? `<p style="font-size:11px;color:#FF6B00;margin-top:6px;border-top:2px solid #000;padding-top:6px">💡 ${escHtml(m.tip)}</p>` : ""}
+            </div>
+        </div>`;
+}
+
+function appendChatMessages() {
+    const container = document.getElementById("chatMessages");
+    if (!container) return;
+    container.innerHTML = S.aiMessages.map(messageHtml).join("")
+        || '<p style="color:#999;text-align:center;padding-top:100px">开始你的第一次对话吧 👇</p>';
+    container.scrollTop = container.scrollHeight;
+}
+
 function renderStep3(el, sc) {
-    let msgs = "";
-    for (const m of S.aiMessages) {
-        const isUser = m.role === "user";
-        msgs += `
-            <div style="display:flex;justify-content:${isUser?'flex-end':'flex-start'};margin-bottom:12px">
-                <div style="max-width:80%;padding:12px 16px;border:3px solid #000;background:${isUser?'#FFFDF0':'#fff'};box-shadow:4px 4px 0px ${isUser?'#FF6B00':'#000'}">
-                    <p style="font-size:14px">${escHtml(m.content)}</p>
-                    ${m.tip ? `<p style="font-size:11px;color:#FF6B00;margin-top:6px;border-top:2px solid #000;padding-top:6px">💡 ${escHtml(m.tip)}</p>` : ""}
-                </div>
-            </div>`;
+    if (!_chatInitialized) {
+        // 首次渲染：建立完整 UI 结构
+        el.innerHTML = `
+            <h3 style="font-size:18px;margin-bottom:8px">AI 角色扮演</h3>
+            <p style="font-size:12px;color:#666;margin-bottom:16px">在「${sc.title_cn}」场景中和 AI 完成英文对话</p>
+            <div id="chatMessages" style="min-height:250px;max-height:400px;overflow-y:auto;margin-bottom:16px"></div>
+            <div style="display:flex;gap:8px">
+                <input id="chatInput" class="input-field" placeholder="输入英文回复..." style="flex:1">
+                <button id="chatBtn" class="btn-primary" style="flex-shrink:0">发送</button>
+            </div>
+            <button id="voiceBtn" style="width:100%;margin-top:8px;background:#000;color:#FFFDF0;border:3px solid #000;padding:10px;cursor:pointer;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px">🎤 语音输入</button>
+            <p id="chatStatus" style="font-size:11px;color:#666;margin-top:8px;text-align:center"></p>`;
+
+        // 语音支持检测
+        const hasSpeech = "webkitSpeechRecognition" in window || "SpeechRecognition" in window;
+        if (!hasSpeech) {
+            document.getElementById("voiceBtn").style.display = "none";
+        }
+
+        const sendMsg = async () => {
+            const input = document.getElementById("chatInput");
+            const msg = input.value.trim();
+            if (!msg) return;
+            input.value = "";
+            input.disabled = true;
+            document.getElementById("chatBtn").disabled = true;
+            document.getElementById("chatStatus").textContent = "AI 正在回复...";
+
+            S.aiMessages.push({ role: "user", content: msg });
+            appendChatMessages();
+
+            try {
+                const r = await API.post("/api/chat", { message: msg, scenario_id: sc.id });
+                S.aiMessages.push({ role: "assistant", content: r.reply, tip: r.tip });
+                appendChatMessages();
+                document.getElementById("chatStatus").textContent = "";
+            } catch (e) {
+                document.getElementById("chatStatus").textContent = "发送失败: " + e.message;
+            }
+            input.disabled = false;
+            document.getElementById("chatBtn").disabled = false;
+            input.focus();
+        };
+
+        document.getElementById("chatBtn").onclick = sendMsg;
+        document.getElementById("chatInput").onkeydown = (e) => { if (e.key === "Enter") sendMsg(); };
+        document.getElementById("chatInput").onfocus = () => {
+            // 移动端键盘弹出时滚动输入框到可见区域
+            setTimeout(() => {
+                document.getElementById("chatInput").scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 300);
+        };
+
+        document.getElementById("voiceBtn").onclick = () => {
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const rec = new SR();
+            rec.lang = "en-US";
+            rec.interimResults = false;
+            document.getElementById("chatStatus").textContent = "正在聆听...";
+            rec.start();
+            rec.onresult = (e) => {
+                document.getElementById("chatInput").value = e.results[0][0].transcript;
+                document.getElementById("chatStatus").textContent = "识别完成，点击发送 →";
+            };
+            rec.onerror = (e) => {
+                document.getElementById("chatStatus").textContent = "语音识别失败: " + e.error;
+            };
+        };
+
+        _chatInitialized = true;
     }
 
-    el.innerHTML = `
-        <h3 style="font-size:18px;margin-bottom:8px">AI 角色扮演</h3>
-        <p style="font-size:12px;color:#666;margin-bottom:16px">在「${sc.title_cn}」场景中和 AI 完成英文对话</p>
-        <div id="chatMessages" style="min-height:250px;max-height:400px;overflow-y:auto;margin-bottom:16px">${msgs || '<p style="color:#999;text-align:center;padding-top:100px">开始你的第一次对话吧 👇</p>'}</div>
-        <div style="display:flex;gap:8px">
-            <input id="chatInput" class="input-field" placeholder="输入英文回复..." style="flex:1">
-            <button id="chatBtn" class="btn-primary" style="flex-shrink:0">发送</button>
-        </div>
-        <button id="voiceBtn" style="width:100%;margin-top:8px;background:#000;color:#FFFDF0;border:3px solid #000;padding:10px;cursor:pointer;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px">🎤 语音输入</button>
-        <p id="chatStatus" style="font-size:11px;color:#666;margin-top:8px;text-align:center"></p>`;
-
-    const sendMsg = async () => {
-        const input = document.getElementById("chatInput");
-        const msg = input.value.trim();
-        if (!msg) return;
-        input.value = "";
-        input.disabled = true;
-        document.getElementById("chatBtn").disabled = true;
-        document.getElementById("chatStatus").textContent = "AI 正在回复...";
-
-        S.aiMessages.push({ role: "user", content: msg });
-        renderStep3(el, sc);
-        document.getElementById("chatMessages").scrollTop = document.getElementById("chatMessages").scrollHeight;
-
-        try {
-            const r = await API.post("/api/chat", { message: msg, scenario_id: sc.id });
-            S.aiMessages.push({ role: "assistant", content: r.reply, tip: r.tip });
-            renderStep3(el, sc);
-            document.getElementById("chatMessages").scrollTop = document.getElementById("chatMessages").scrollHeight;
-            document.getElementById("chatStatus").textContent = "";
-        } catch (e) {
-            document.getElementById("chatStatus").textContent = "发送失败: " + e.message;
-        }
-        input.disabled = false;
-        document.getElementById("chatBtn").disabled = false;
-        input.focus();
-    };
-
-    document.getElementById("chatBtn").onclick = sendMsg;
-    document.getElementById("chatInput").onkeydown = (e) => { if (e.key === "Enter") sendMsg(); };
-
-    document.getElementById("voiceBtn").onclick = () => {
-        if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
-            document.getElementById("chatStatus").textContent = "你的浏览器不支持语音输入，请使用 Chrome";
-            return;
-        }
-        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        const rec = new SR();
-        rec.lang = "en-US";
-        rec.interimResults = false;
-        document.getElementById("chatStatus").textContent = "正在聆听...";
-        rec.start();
-        rec.onresult = (e) => {
-            const text = e.results[0][0].transcript;
-            document.getElementById("chatInput").value = text;
-            document.getElementById("chatStatus").textContent = "识别完成，点击发送 →";
-        };
-        rec.onerror = (e) => {
-            document.getElementById("chatStatus").textContent = "语音识别失败: " + e.error;
-        };
-    };
+    // 初始化或更新后都刷新消息列表
+    appendChatMessages();
 }
 
 // ── 步骤 4：语块收藏 ──────────────────────────────────
@@ -620,6 +663,8 @@ function renderStep4(el, sc) {
 // ── 步骤 5：限时反应 ──────────────────────────────────
 function renderStep5(el, sc) {
     const questions = sc.reaction_questions || [];
+    const TIME_LIMIT = 30;
+
     let html = '<h3 style="font-size:18px;margin-bottom:8px">限时反应</h3>';
     html += '<p style="font-size:12px;color:#666;margin-bottom:4px">30 秒内用学到的话快速回答 5 个问题</p>';
     html += '<p style="font-size:11px;color:#999;margin-bottom:16px">目标是脱口而出，不是完美语法</p>';
@@ -633,23 +678,36 @@ function renderStep5(el, sc) {
     document.getElementById("startReaction").onclick = () => {
         let qIdx = 0;
         let correctCount = 0;
+        let timeLeft = TIME_LIMIT;
+        let timer = null;
         const area = document.getElementById("reactionArea");
 
+        const endChallenge = () => {
+            if (timer) clearInterval(timer);
+            area.innerHTML = `
+                <div class="card" style="padding:24px;text-align:center">
+                    <div style="font-family:'Space Grotesk',sans-serif;font-weight:900;font-size:48px;color:#FF6B00">${correctCount}/${questions.length}</div>
+                    <p style="font-size:14px;margin-top:8px">流利度挑战完成</p>
+                    <p style="font-size:11px;color:#666;margin-top:4px">${qIdx >= questions.length ? '全部答完！' : '时间到！'}不会的没关系，下次再练</p>
+                </div>`;
+        };
+
         const showQuestion = () => {
-            if (qIdx >= questions.length) {
-                area.innerHTML = `
-                    <div class="card" style="padding:24px;text-align:center">
-                        <div style="font-family:'Space Grotesk',sans-serif;font-weight:900;font-size:48px;color:#FF6B00">${correctCount}/${questions.length}</div>
-                        <p style="font-size:14px;margin-top:8px">流利度挑战完成</p>
-                        <p style="font-size:11px;color:#666;margin-top:4px">不会的没关系，下次再练</p>
-                    </div>`;
+            if (qIdx >= questions.length || timeLeft <= 0) {
+                endChallenge();
                 return;
             }
 
             const q = questions[qIdx];
             area.innerHTML = `
                 <div class="card" style="padding:24px;text-align:center">
-                    <div style="font-size:11px;color:#999;margin-bottom:4px">${qIdx + 1} / ${questions.length}</div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                        <span style="font-size:11px;color:#999">${qIdx + 1} / ${questions.length}</span>
+                        <span style="font-size:14px;font-weight:700;color:#FF6B00">⏱ ${timeLeft}s</span>
+                    </div>
+                    <div style="border:3px solid #000;height:6px;margin-bottom:16px;position:relative">
+                        <div id="timerBar" style="background:#FF6B00;height:100%;width:${(timeLeft/TIME_LIMIT)*100}%;transition:width 1s linear"></div>
+                    </div>
                     <p style="font-size:18px;font-weight:700;margin-bottom:16px">${escHtml(q.question)}</p>
                     <input id="reactionInput" class="input-field" placeholder="输入你的回答..." style="text-align:center;margin-bottom:12px">
                     <div style="display:flex;gap:8px;justify-content:center">
@@ -673,20 +731,34 @@ function renderStep5(el, sc) {
                     fb.style.color = "#FF6B00";
                 }
                 qIdx++;
-                setTimeout(showQuestion, 1200);
+                setTimeout(showQuestion, 1000);
             };
 
             document.getElementById("skipReaction").onclick = () => {
                 document.getElementById("reactionFeedback").textContent = "💡 参考: " + q.expected_answer;
                 document.getElementById("reactionFeedback").style.color = "#FF6B00";
                 qIdx++;
-                setTimeout(showQuestion, 1200);
+                setTimeout(showQuestion, 800);
             };
 
             document.getElementById("reactionInput").onkeydown = (e) => {
                 if (e.key === "Enter") document.getElementById("submitReaction").click();
             };
+            document.getElementById("reactionInput").focus();
         };
+
+        // 启动倒计时
+        timer = setInterval(() => {
+            timeLeft--;
+            const bar = document.getElementById("timerBar");
+            if (bar) bar.style.width = (timeLeft / TIME_LIMIT) * 100 + "%";
+            // 更新页面上显示的时间
+            const timeSpan = area.querySelector("span[style]");
+            // Simple approach: update the card HTML for time display
+            if (timeLeft <= 0) {
+                endChallenge();
+            }
+        }, 1000);
 
         showQuestion();
     };
@@ -754,10 +826,10 @@ function showCanDo() {
                 <p style="font-size:10px;color:#999;margin-bottom:4px">CEFR Can-Do</p>
                 <p style="font-size:14px;font-weight:700">${escHtml(sc.can_do || '完成本场景学习')}</p>
             </div>
-            <button class="btn-primary" style="width:100%" onclick="document.body.removeChild(this.parentElement.parentElement);showPage('homePage');">返回首页</button>
+            <button class="btn-primary" style="width:100%" onclick="document.body.removeChild(this.parentElement.parentElement);showPage('homePage');loadScenarios();">返回首页</button>
         </div>`;
     document.body.appendChild(overlay);
-    overlay.onclick = (e) => { if (e.target === overlay) { document.body.removeChild(overlay); showPage("homePage"); } };
+    overlay.onclick = (e) => { if (e.target === overlay) { document.body.removeChild(overlay); showPage("homePage"); loadScenarios(); } };
 }
 
 // ════════════════════════════════════════════════════════
