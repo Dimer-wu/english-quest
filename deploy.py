@@ -109,16 +109,14 @@ echo "服务端安装完成"
         print("  [stderr] " + err.replace("\n", "\n  ")[:500])
 
     print("[4/5] 启动服务...")
-    ssh.exec_command(
-        f"cd {REMOTE_DIR} && nohup python3 app.py > app.log 2>&1 &"
-    )
-    # 等启动
+    # Use systemd service (handles auto-restart on reboot)
+    ssh.exec_command(f"systemctl restart english-quest 2>/dev/null || (cd {REMOTE_DIR} && nohup python3 app.py > app.log 2>&1 &)")
     import time
     time.sleep(3)
 
-    stdin, stdout, stderr = ssh.exec_command(f"cat {REMOTE_DIR}/app.log | tail -5")
-    log = stdout.read().decode("utf-8")
-    print("  " + log.replace("\n", "\n  "))
+    stdin, stdout, stderr = ssh.exec_command(f"systemctl status english-quest --no-pager | head -3")
+    status = stdout.read().decode("utf-8")
+    print("  " + status.replace("\n", "\n  "))
 
     print("[5/5] 验证服务...")
     verify_cmd = f"curl -s http://localhost:{PORT_NUM}/api/scenarios | head -c 100"
@@ -132,9 +130,8 @@ echo "服务端安装完成"
     print("=" * 50)
     print("  部署完成！")
     print()
-    print("  本地测试: http://localhost:8001")
-    print("  服务器: http://47.239.122.123:8001")
-    print("  (需配置 Cloudflare Tunnel 后才能用 HTTPS)")
+    print("  HTTPS: https://dimerenglish.top")
+    print("  服务: systemctl status english-quest")
     print("=" * 50)
 
 
