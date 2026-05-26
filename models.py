@@ -17,6 +17,8 @@ class User(Base):
     password_hash = Column(String(200), nullable=False)
     status = Column(String(20), default="pending")  # pending / active / disabled
     is_admin = Column(Integer, default=0)
+    session_version = Column(Integer, default=0)
+    last_login_at = Column(DateTime)
     level = Column(Integer, default=1)
     streak_days = Column(Integer, default=0)
     last_study_date = Column(Date)

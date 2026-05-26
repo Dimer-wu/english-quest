@@ -90,7 +90,12 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
         raise HTTPException(403, "账号等待管理员审核中，请稍后再试")
     if user.status == "disabled":
         raise HTTPException(403, "账号已被禁用，请联系管理员")
+    # 踢掉旧会话：递增版本号，旧会话下次请求时校验失败
+    user.session_version = (user.session_version or 0) + 1
+    user.last_login_at = datetime.now(timezone.utc)
+    db.commit()
     request.session["user_id"] = user.id
+    request.session["sv"] = user.session_version
     return {"ok": True, "user": {"id": user.id, "username": user.username, "level": user.level}}
 
 
@@ -425,6 +430,7 @@ def api_admin_users(user: User = Depends(require_admin), db: Session = Depends(g
                 "level": u.level,
                 "streak_days": u.streak_days,
                 "created_at": u.created_at.strftime("%Y-%m-%d %H:%M") if u.created_at else "",
+                "last_login_at": u.last_login_at.strftime("%Y-%m-%d %H:%M") if u.last_login_at else "从未登录",
             }
             for u in users
         ]
@@ -451,6 +457,22 @@ def api_admin_disable(user_id: int, user: User = Depends(require_admin), db: Ses
     if target.is_admin:
         raise HTTPException(400, "不能操作管理员账号")
     target.status = "disabled"
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/api/admin/users/{user_id}/delete")
+def api_admin_delete(user_id: int, user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    target = db.query(User).filter_by(id=user_id).first()
+    if not target:
+        raise HTTPException(404, "用户不存在")
+    if target.is_admin:
+        raise HTTPException(400, "不能删除管理员账号")
+    # 清理关联数据
+    db.query(UserProgress).filter_by(user_id=user_id).delete()
+    db.query(UserChunk).filter_by(user_id=user_id).delete()
+    db.query(ChatLog).filter_by(user_id=user_id).delete()
+    db.delete(target)
     db.commit()
     return {"ok": True}
 

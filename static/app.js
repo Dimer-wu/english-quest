@@ -71,11 +71,27 @@ const API = {
         const fd = new FormData();
         for (const [k, v] of Object.entries(body)) fd.append(k, v);
         const r = await fetch(url, { method: "POST", body: fd });
+        if (r.status === 401) {
+            const e = await r.json().catch(() => ({}));
+            if (e.detail && e.detail.includes("其他设备")) {
+                S.user = null; S.stats = null;
+                showPage("loginPage"); renderLogin();
+                throw new Error(e.detail);
+            }
+        }
         if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || r.statusText); }
         return r.json();
     },
     async get(url) {
         const r = await fetch(url);
+        if (r.status === 401) {
+            const e = await r.json().catch(() => ({}));
+            if (e.detail && e.detail.includes("其他设备")) {
+                S.user = null; S.stats = null;
+                showPage("loginPage"); renderLogin();
+                throw new Error(e.detail);
+            }
+        }
         if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || r.statusText); }
         return r.json();
     }
@@ -986,16 +1002,21 @@ async function loadAdminUsers() {
             const color = statusColors[u.status] || "#000";
             const label = statusLabels[u.status] || u.status;
             html += `
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:2px solid #000">
-                    <div>
-                        <span style="font-weight:700">${escHtml(u.username)}</span>
-                        <span style="font-size:11px;color:${color};margin-left:8px">${label}</span>
-                        ${u.is_admin ? '<span style="font-size:10px;background:#000;color:#FFFDF0;padding:2px 6px;margin-left:4px">管理员</span>' : ""}
-                        <span style="font-size:10px;color:#999;margin-left:4px">L${u.level} · ${u.streak_days}天</span>
+                <div style="padding:8px 0;border-bottom:2px solid #000">
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <div>
+                            <span style="font-weight:700">${escHtml(u.username)}</span>
+                            <span style="font-size:11px;color:${color};margin-left:8px">${label}</span>
+                            ${u.is_admin ? '<span style="font-size:10px;background:#000;color:#FFFDF0;padding:2px 6px;margin-left:4px">管理员</span>' : ""}
+                        </div>
+                        <div style="display:flex;gap:4px">
+                            ${u.status === "pending" ? `<button class="admin-approve" data-id="${u.id}" style="background:#00a000;color:#fff;border:2px solid #000;padding:4px 8px;cursor:pointer;font-size:11px;font-weight:700">通过</button>` : ""}
+                            ${u.status !== "disabled" && !u.is_admin ? `<button class="admin-disable" data-id="${u.id}" style="background:#fff;border:2px solid #d00;color:#d00;padding:4px 8px;cursor:pointer;font-size:11px;font-weight:700">禁用</button>` : ""}
+                            ${!u.is_admin ? `<button class="admin-delete" data-id="${u.id}" data-name="${escAttr(u.username)}" style="background:#d00;color:#fff;border:2px solid #000;padding:4px 8px;cursor:pointer;font-size:11px;font-weight:700">删除</button>` : ""}
+                        </div>
                     </div>
-                    <div style="display:flex;gap:4px">
-                        ${u.status === "pending" ? `<button class="admin-approve" data-id="${u.id}" style="background:#00a000;color:#fff;border:2px solid #000;padding:4px 8px;cursor:pointer;font-size:11px;font-weight:700">通过</button>` : ""}
-                        ${u.status !== "disabled" && !u.is_admin ? `<button class="admin-disable" data-id="${u.id}" style="background:#fff;border:2px solid #d00;color:#d00;padding:4px 8px;cursor:pointer;font-size:11px;font-weight:700">禁用</button>` : ""}
+                    <div style="font-size:10px;color:#999;margin-top:2px">
+                        注册: ${escHtml(u.created_at)} · 最近登录: ${escHtml(u.last_login_at)} · L${u.level} · 连续${u.streak_days}天
                     </div>
                 </div>`;
         }
@@ -1012,6 +1033,13 @@ async function loadAdminUsers() {
             btn.onclick = async () => {
                 if (!confirm("确定要禁用此用户吗？")) return;
                 await API.post(`/api/admin/users/${btn.dataset.id}/disable`);
+                loadAdminUsers();
+            };
+        });
+        document.querySelectorAll(".admin-delete").forEach(btn => {
+            btn.onclick = async () => {
+                if (!confirm(`确定要删除用户「${btn.dataset.name}」吗？\n此操作不可撤销，将清除该用户的所有学习数据。`)) return;
+                await API.post(`/api/admin/users/${btn.dataset.id}/delete`);
                 loadAdminUsers();
             };
         });
